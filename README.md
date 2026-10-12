@@ -37,7 +37,7 @@ This app queries the existing graph using these exact labels, properties and rel
 - `(:Defect_Case)-[:What_Crack]->(:Crack_Type)`
 - `(:Crack_Type)-[:What_Cause]->(:Potential_cause)`
 
-The frontend accepts an image only. The NVIDIA model selects a crack type and component from the fixed vocabulary in the bundled CSV. The server validates these as canonical values, then performs a parameterised, read-only exact-match query against Aura. It displays the potential causes connected to matching crack types and cases.
+The frontend accepts an image only. NVIDIA returns the crack type and component it actually observes, in plain language, even if a label is not in the knowledge graph vocabulary. The server separately checks whether both labels match supported graph values. Only then does it run a parameterised, read-only exact-match query against Aura. If either label is not represented, the app displays the model detection and explains that no graph lookup was performed instead of silently forcing the result into a different label.
 
 The app does not initialise or write to the graph. `scripts/schema.cypher` and `scripts/import-cases.cypher` are optional reference scripts only; they are not part of the deployment workflow. Aura cannot read a `file:///` path on your desktop.
 

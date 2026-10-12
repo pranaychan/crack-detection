@@ -39,9 +39,20 @@ export default function Home() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ imageDataUrl }),
       });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Analysis request failed.");
-      setResult(data as AnalysisResponse);
+      const responseText = await response.text();
+      let data: Record<string, unknown>;
+      try {
+        data = JSON.parse(responseText) as Record<string, unknown>;
+      } catch {
+        const preview = responseText.trim().slice(0, 220);
+        throw new Error(
+          response.status === 413
+            ? "The image request is too large for the server. Choose a smaller image (under 2 MB) and try again."
+            : `The server returned a non-JSON error (HTTP ${response.status}). ${preview || "No error details were returned."}`
+        );
+      }
+      if (!response.ok) throw new Error(typeof data.error === "string" ? data.error : "Analysis request failed.");
+      setResult(data as unknown as AnalysisResponse);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Something went wrong.");
     } finally { setLoading(false); }
@@ -57,7 +68,7 @@ export default function Home() {
       <section className="hero">
         <p className="eyebrow">CONSTRUCTION DEFECT INTELLIGENCE</p>
         <h1>Upload the crack.<br /><span>Trace potential causes.</span></h1>
-        <p className="hero-copy">Upload a photo. NVIDIA DeepSeek identifies the closest crack type and component from the available categories, then Neo4j Aura retrieves the associated potential causes.</p>
+        <p className="hero-copy">Upload a photo. NVIDIA DeepSeek identifies the visible crack type and component in its own words. If those labels match your knowledge graph, Neo4j Aura retrieves associated potential causes.</p>
       </section>
 
       <section className="workspace image-workspace">
@@ -76,13 +87,14 @@ export default function Home() {
         </form>
 
         <aside className="side-panel result-side-panel" aria-live="polite">
-          {!result && !loading && <div className="panel panel-info side-result-placeholder"><p className="eyebrow">02 / KNOWLEDGE GRAPH RESULTS</p><h2>Potential causes appear here</h2><p className="placeholder-copy">After image analysis, the presumed crack type and component will be matched against Neo4j Aura. Any linked potential causes will appear in this panel.</p><div className="mini-flow"><span>Image</span><b>→</b><span>DeepSeek</span><b>→</b><span>Neo4j</span></div></div>}
+          {!result && !loading && <div className="panel panel-info side-result-placeholder"><p className="eyebrow">02 / KNOWLEDGE GRAPH RESULTS</p><h2>Potential causes appear here</h2><p className="placeholder-copy">After image analysis, the model’s detected crack type and component are shown here. If both match the graph vocabulary, linked potential causes appear below.</p><div className="mini-flow"><span>Image</span><b>→</b><span>DeepSeek</span><b>→</b><span>Neo4j</span></div></div>}
           {loading && <div className="panel panel-info side-result-placeholder"><span className="spinner" /><h2>Analysing image</h2><p className="placeholder-copy">Identifying the crack and component, then querying the knowledge graph…</p></div>}
           {result && <div className="panel panel-info cause-result-panel">
             <p className="eyebrow">02 / KNOWLEDGE GRAPH RESULTS</p>
             <h2>Potential causes</h2>
             <div className="connection"><span />{result.graph_connected ? "Neo4j Aura queried" : "Graph unavailable"}</div>
             <div className="classification-block"><span className="result-label">PRESUMED CRACK TYPE</span><strong>{result.extracted.crack_type || "Not identified"}</strong><span className="result-label">PRESUMED COMPONENT</span><strong>{result.extracted.component || "Not identified"}</strong></div>
+            {result.extracted.crack_type && result.extracted.component && (!result.extracted.graph_crack_type || !result.extracted.graph_component) && <div className="empty-state compact-empty"><strong>Not represented in the current knowledge graph</strong><p>The model's detected labels are shown above without forcing them into a different category. No graph cause lookup was performed because the label(s) do not exactly match the graph vocabulary.</p><p>Detected crack type: {result.extracted.crack_type}. Detected component: {result.extracted.component}.</p></div>}
             <div className="visual-observation"><span className="result-label">VISIBLE OBSERVATION</span><p>{result.extracted.visual_observation}</p><p className="uncertainty-note">{result.extracted.confidence_note}</p></div>
             {result.potential_causes.length > 0 ? <ul className="potential-cause-list">{result.potential_causes.map((cause, index) => <li key={`${cause}-${index}`}>{cause}</li>)}</ul> : <div className="empty-state compact-empty">{result.message || "No potential causes were returned."}</div>}
             {result.matched_cases.length > 0 && <div className="matched-cases"><h3>Matched cases ({result.matched_cases.length})</h3>{result.matched_cases.map((item) => <article className="matched-case" key={item.case_id}><strong>{item.case_id}</strong>{item.building_type && <span>{item.building_type}</span>}{item.observed_symptoms && <p>{item.observed_symptoms}</p>}{item.evidence_notes && <p className="case-meta"><strong>Evidence:</strong> {item.evidence_notes}</p>}</article>)}</div>}

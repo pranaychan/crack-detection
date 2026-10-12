@@ -1,6 +1,8 @@
 export type ExtractedDefect = {
   crack_type: string | null;
   component: string | null;
+  graph_crack_type: string | null;
+  graph_component: string | null;
   visual_observation: string;
   confidence_note: string;
 };
