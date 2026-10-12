@@ -1,13 +1,10 @@
 import neo4j, { Driver } from "neo4j-driver";
+import type { MatchingCase } from "@/lib/types";
 
 let driver: Driver | undefined;
 
 export function isNeo4jConfigured(): boolean {
-  return Boolean(
-    process.env.NEO4J_URI &&
-    process.env.NEO4J_USERNAME &&
-    process.env.NEO4J_PASSWORD
-  );
+  return Boolean(process.env.NEO4J_URI && process.env.NEO4J_USERNAME && process.env.NEO4J_PASSWORD);
 }
 
 function getDriver(): Driver {
@@ -24,80 +21,48 @@ function getDriver(): Driver {
   return driver;
 }
 
-export type RelatedCase = {
-  case_id: string;
-  building_type: string | null;
-  crack_type: string | null;
-  component: string | null;
-  symptoms: string | null;
-  potential_causes: string[];
-  priority: string | null;
-  evidence_status: string | null;
-  evidence_notes: string | null;
-  follow_up: string | null;
-  match_reason: string;
-};
+/** Exact-match, read-only query against the user's existing Aura graph schema. */
+export async function findMatchingCases(input: {
+  crackType: string;
+  component: string;
+}): Promise<MatchingCase[]> {
+  const session = getDriver().session({
+    database: process.env.NEO4J_DATABASE || "neo4j",
+    defaultAccessMode: neo4j.session.READ,
+  });
 
-// This is a fixed, read-only Cypher template. User text is only passed as parameters.
-export async function findRelatedCases(input: {
-  crackType?: string | null;
-  component?: string | null;
-  buildingType?: string | null;
-  keywords?: string[];
-}): Promise<RelatedCase[]> {
-  const d = getDriver();
-  const session = d.session({ database: process.env.NEO4J_DATABASE || "neo4j", defaultAccessMode: neo4j.session.READ });
   try {
     const result = await session.run(
-      `MATCH (c:DefectCase)
-       OPTIONAL MATCH (c)-[:HAS_CRACK_TYPE]->(t:CrackType)
-       OPTIONAL MATCH (c)-[:OCCURS_ON]->(p:Component)
-       OPTIONAL MATCH (c)-[:MAY_BE_ASSOCIATED_WITH]->(cause:PotentialCause)
-       WITH c, t, p, collect(DISTINCT cause.name) AS causes,
-         CASE WHEN $crackType IS NOT NULL AND toLower(coalesce(t.name, '')) CONTAINS toLower($crackType) THEN 3 ELSE 0 END +
-         CASE WHEN $component IS NOT NULL AND toLower(coalesce(p.name, '')) CONTAINS toLower($component) THEN 3 ELSE 0 END +
-         CASE WHEN $buildingType IS NOT NULL AND toLower(coalesce(c.building_type, '')) CONTAINS toLower($buildingType) THEN 1 ELSE 0 END +
-         reduce(score = 0, keyword IN $keywords |
-           score + CASE WHEN toLower(coalesce(c.observed_symptoms, '')) CONTAINS toLower(keyword)
-                         OR toLower(coalesce(c.evidence_notes, '')) CONTAINS toLower(keyword)
-                        THEN 1 ELSE 0 END) AS score
-       WHERE score > 0
-       RETURN c.case_id AS case_id,
-         c.building_type AS building_type,
-         t.name AS crack_type,
-         p.name AS component,
-         c.observed_symptoms AS symptoms,
-         causes AS potential_causes,
-         c.screening_priority AS priority,
-         c.evidence_status AS evidence_status,
-         c.evidence_notes AS evidence_notes,
-         c.suggested_follow_up AS follow_up,
-         score AS score
-       ORDER BY score DESC, case_id ASC
-       LIMIT 8`,
-      {
-        crackType: input.crackType || null,
-        component: input.component || null,
-        buildingType: input.buildingType || null,
-        keywords: (input.keywords || []).slice(0, 8),
-      }
+      `MATCH (d:Defect_Case)-[:What_Crack]->(ct:Crack_Type)
+       MATCH (d)-[:What_Component]->(c:Component)
+       MATCH (ct)-[:What_Cause]->(p:Potential_cause)
+       WHERE toLower(ct.crack_type) = toLower($crack_type)
+         AND toLower(c.component) = toLower($component)
+       RETURN
+         d.case_id AS case_id,
+         d.building_type AS building_type,
+         d.observed_symptoms AS observed_symptoms,
+         d.evidence_status AS evidence_status,
+         d.evidence_notes AS evidence_notes,
+         ct.crack_type AS crack_type,
+         c.component AS component,
+         collect(DISTINCT p.potential_causes_unverified) AS potential_causes
+       ORDER BY case_id ASC
+       LIMIT 50`,
+      { crack_type: input.crackType, component: input.component }
     );
-    return result.records.map((r) => {
-      const score = Number(r.get("score") || 0);
-      return {
-        case_id: r.get("case_id"),
-        building_type: r.get("building_type"),
-        crack_type: r.get("crack_type"),
-        component: r.get("component"),
-        symptoms: r.get("symptoms"),
-        potential_causes: (r.get("potential_causes") || []).filter(Boolean),
-        priority: r.get("priority"),
-        evidence_status: r.get("evidence_status"),
-        evidence_notes: r.get("evidence_notes"),
-        follow_up: r.get("follow_up"),
-        match_reason: `Graph match score: ${score}`,
-      };
-    });
+
+    return result.records.map((record) => ({
+      case_id: String(record.get("case_id") ?? "Unknown case"),
+      building_type: record.get("building_type") ?? null,
+      observed_symptoms: record.get("observed_symptoms") ?? null,
+      evidence_status: record.get("evidence_status") ?? null,
+      evidence_notes: record.get("evidence_notes") ?? null,
+      crack_type: record.get("crack_type") ?? null,
+      component: record.get("component") ?? null,
+      potential_causes: ((record.get("potential_causes") as unknown[]) || [])
+        .filter((cause): cause is string => typeof cause === "string" && cause.trim().length > 0),
+    }));
   } finally {
     await session.close();
   }
@@ -108,7 +73,7 @@ export async function getGraphHealth(): Promise<{ connected: boolean; cases?: nu
   try {
     const d = getDriver();
     session = d.session({ database: process.env.NEO4J_DATABASE || "neo4j", defaultAccessMode: neo4j.session.READ });
-    const result = await session.run("MATCH (c:DefectCase) RETURN count(c) AS cases");
+    const result = await session.run("MATCH (d:Defect_Case) RETURN count(d) AS cases");
     const value = result.records[0]?.get("cases");
     const cases = neo4j.isInt(value) ? value.toNumber() : Number(value ?? 0);
     return { connected: true, cases };

@@ -4,7 +4,6 @@ import { ChangeEvent, FormEvent, useState } from "react";
 import type { AnalysisResponse } from "@/lib/types";
 
 export default function Home() {
-  const [description, setDescription] = useState("");
   const [imageDataUrl, setImageDataUrl] = useState<string | undefined>();
   const [imageName, setImageName] = useState("");
   const [loading, setLoading] = useState(false);
@@ -13,10 +12,11 @@ export default function Home() {
 
   async function onImageChange(event: ChangeEvent<HTMLInputElement>) {
     setError("");
+    setResult(null);
     const file = event.target.files?.[0];
     if (!file) return;
     if (!file.type.startsWith("image/")) { setError("Please choose an image file."); return; }
-    if (file.size > 2.8 * 1024 * 1024) { setError("Image must be 3 MB or smaller."); return; }
+    if (file.size > 2.8 * 1024 * 1024) { setError("Image must be 2.8 MB or smaller."); return; }
     try {
       const dataUrl = await new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
@@ -31,12 +31,13 @@ export default function Home() {
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!imageDataUrl) { setError("Upload a crack image first."); return; }
     setLoading(true); setError(""); setResult(null);
     try {
       const response = await fetch("/api/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ description, imageDataUrl }),
+        body: JSON.stringify({ imageDataUrl }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Analysis request failed.");
@@ -50,62 +51,48 @@ export default function Home() {
     <main className="shell">
       <header className="topbar">
         <a className="brand" href="#"><span className="brand-mark">C</span><span>CrackScope</span></a>
-        <span className="top-tag">AI · KNOWLEDGE GRAPH</span>
+        <span className="top-tag">IMAGE · AI · KNOWLEDGE GRAPH</span>
       </header>
 
       <section className="hero">
         <p className="eyebrow">CONSTRUCTION DEFECT INTELLIGENCE</p>
-        <h1>Understand the crack.<br /><span>Trace the evidence.</span></h1>
-        <p className="hero-copy">Describe a crack or add a photo. NVIDIA AI extracts observations, then Neo4j retrieves related cases from your defect knowledge graph.</p>
+        <h1>Upload the crack.<br /><span>Trace potential causes.</span></h1>
+        <p className="hero-copy">Upload a photo. NVIDIA DeepSeek identifies the closest crack type and component from the available categories, then Neo4j Aura retrieves the associated potential causes.</p>
       </section>
 
-      <section className="workspace">
+      <section className="workspace image-workspace">
         <form className="input-panel panel" onSubmit={submit}>
-          <div className="panel-heading"><div><p className="eyebrow">01 / OBSERVATION</p><h2>Describe the defect</h2></div><span className="step">INPUT</span></div>
-          <label htmlFor="description">What do you observe?</label>
-          <textarea id="description" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Example: A diagonal crack starts at the corner of a window in a masonry wall. The crack appears to be widening..." rows={6} />
-          <div className="upload-row">
-            <label className="upload-button" htmlFor="image">＋ Attach image</label>
-            <input id="image" type="file" accept="image/*" onChange={onImageChange} />
-            <span className="upload-note">Optional · max 2.8 MB</span>
+          <div className="panel-heading"><div><p className="eyebrow">01 / IMAGE INPUT</p><h2>Upload crack image</h2></div><span className="step">REQUIRED</span></div>
+          <p className="input-description">Use a clear, well-lit image where the crack and the affected building element are visible.</p>
+          <div className={`image-dropzone ${imageDataUrl ? "has-image" : ""}`}>
+            {imageDataUrl ? <img className="image-preview" src={imageDataUrl} alt="Selected crack for analysis" /> : <div className="image-placeholder"><span className="image-placeholder-icon">＋</span><strong>Select an image</strong><span>JPEG, PNG, WebP or GIF · max 2.8 MB</span></div>}
+            <label className="upload-button" htmlFor="image">{imageDataUrl ? "Choose another image" : "Browse files"}</label>
+            <input id="image" type="file" accept="image/jpeg,image/png,image/webp,image/gif" onChange={onImageChange} />
           </div>
-          {imageName && <div className="file-chip">{imageName}<button type="button" aria-label="Remove image" onClick={() => { setImageDataUrl(undefined); setImageName(""); }}>×</button></div>}
-          <button className="primary-button" type="submit" disabled={loading || (!description.trim() && !imageDataUrl)}>{loading ? <><span className="spinner" /> Analysing observation…</> : <>Analyse defect <span>↗</span></>}</button>
-          <p className="privacy-note">Your API credentials stay on the server. Images are sent to the configured NVIDIA endpoint for analysis.</p>
+          {imageName && <div className="file-chip">{imageName}<button type="button" aria-label="Remove image" onClick={() => { setImageDataUrl(undefined); setImageName(""); setResult(null); }}>×</button></div>}
+          <button className="primary-button" type="submit" disabled={loading || !imageDataUrl}>{loading ? <><span className="spinner" /> Analysing image…</> : <>Identify crack & retrieve causes <span>↗</span></>}</button>
+          <p className="privacy-note">The image is sent to the configured NVIDIA API. Credentials remain server-side.</p>
           {error && <p className="error-message" role="alert">{error}</p>}
         </form>
 
-        <aside className="side-panel">
-          <div className="panel panel-info"><p className="eyebrow">HOW IT WORKS</p><ol className="steps"><li><span>1</span><div><strong>Extract</strong><p>Identify crack type, component and visible symptoms.</p></div></li><li><span>2</span><div><strong>Retrieve</strong><p>Search connected cases and potential causes in Neo4j.</p></div></li><li><span>3</span><div><strong>Review</strong><p>Summarise relevant records and evidence limitations.</p></div></li></ol></div>
-          <div className="disclaimer"><span className="warning-icon">!</span><p><strong>Decision support only</strong><br />A photo or a similar case cannot confirm root cause or certify structural safety.</p></div>
+        <aside className="side-panel result-side-panel" aria-live="polite">
+          {!result && !loading && <div className="panel panel-info side-result-placeholder"><p className="eyebrow">02 / KNOWLEDGE GRAPH RESULTS</p><h2>Potential causes appear here</h2><p className="placeholder-copy">After image analysis, the presumed crack type and component will be matched against Neo4j Aura. Any linked potential causes will appear in this panel.</p><div className="mini-flow"><span>Image</span><b>→</b><span>DeepSeek</span><b>→</b><span>Neo4j</span></div></div>}
+          {loading && <div className="panel panel-info side-result-placeholder"><span className="spinner" /><h2>Analysing image</h2><p className="placeholder-copy">Identifying the crack and component, then querying the knowledge graph…</p></div>}
+          {result && <div className="panel panel-info cause-result-panel">
+            <p className="eyebrow">02 / KNOWLEDGE GRAPH RESULTS</p>
+            <h2>Potential causes</h2>
+            <div className="connection"><span />{result.graph_connected ? "Neo4j Aura queried" : "Graph unavailable"}</div>
+            <div className="classification-block"><span className="result-label">PRESUMED CRACK TYPE</span><strong>{result.extracted.crack_type || "Not identified"}</strong><span className="result-label">PRESUMED COMPONENT</span><strong>{result.extracted.component || "Not identified"}</strong></div>
+            <div className="visual-observation"><span className="result-label">VISIBLE OBSERVATION</span><p>{result.extracted.visual_observation}</p><p className="uncertainty-note">{result.extracted.confidence_note}</p></div>
+            {result.potential_causes.length > 0 ? <ul className="potential-cause-list">{result.potential_causes.map((cause, index) => <li key={`${cause}-${index}`}>{cause}</li>)}</ul> : <div className="empty-state compact-empty">{result.message || "No potential causes were returned."}</div>}
+            {result.matched_cases.length > 0 && <div className="matched-cases"><h3>Matched cases ({result.matched_cases.length})</h3>{result.matched_cases.map((item) => <article className="matched-case" key={item.case_id}><strong>{item.case_id}</strong>{item.building_type && <span>{item.building_type}</span>}{item.observed_symptoms && <p>{item.observed_symptoms}</p>}{item.evidence_notes && <p className="case-meta"><strong>Evidence:</strong> {item.evidence_notes}</p>}</article>)}</div>}
+            <div className="disclaimer"><span className="warning-icon">!</span><p><strong>Unverified associations</strong><br />These are potential causes stored in the knowledge graph, not confirmed diagnoses. A photograph cannot establish structural safety.</p></div>
+            {result.limitations.length > 0 && <ul className="limitations-list">{result.limitations.map((item) => <li key={item}>{item}</li>)}</ul>}
+          </div>}
         </aside>
       </section>
 
-      {result && <section className="results" aria-live="polite">
-        <div className="results-heading"><div><p className="eyebrow">02 / FINDINGS</p><h2>Analysis results</h2></div><span className={`connection ${result.graph_connected ? "connected" : "disconnected"}`}><span />{result.graph_connected ? "Knowledge graph queried" : "Graph not connected"}</span></div>
-        <div className="result-grid">
-          <article className="panel extracted-panel"><p className="eyebrow">EXTRACTED OBSERVATION</p><dl className="field-list">
-            <div><dt>Crack type</dt><dd>{result.extracted.crack_type || "Not identified"}</dd></div>
-            <div><dt>Component</dt><dd>{result.extracted.component || "Not identified"}</dd></div>
-            <div><dt>Building type</dt><dd>{result.extracted.building_type || "Not identified"}</dd></div>
-            <div><dt>Symptoms</dt><dd>{result.extracted.symptoms || "Not provided"}</dd></div>
-            <div><dt>Uncertainty</dt><dd>{result.extracted.uncertainty || "Not specified"}</dd></div>
-          </dl></article>
-          <article className="panel analysis-panel"><p className="eyebrow">AI SUMMARY</p><div className="analysis-text">{result.analysis}</div></article>
-        </div>
-        <div className="cases-heading"><h3>Related knowledge-graph cases</h3><span>{result.related_cases.length} found</span></div>
-        {result.related_cases.length ? <div className="case-list">{result.related_cases.map((c) => <article className="case-card" key={c.case_id}>
-          <div className="case-top"><strong>{c.case_id}</strong><span className={`priority priority-${(c.priority || "unknown").toLowerCase()}`}>{c.priority || "Unrated"}</span></div>
-          <h4>{c.crack_type || "Crack case"} <span>·</span> {c.component || "Component not specified"}</h4>
-          <p>{c.symptoms || "No symptoms recorded."}</p>
-          {c.potential_causes.length > 0 && <div className="cause-tags">{c.potential_causes.map((cause) => <span key={cause}>{cause}</span>)}</div>}
-          {c.evidence_notes && <p className="case-meta"><strong>Evidence notes:</strong> {c.evidence_notes}</p>}
-          {c.follow_up && <p className="case-meta"><strong>Suggested follow-up:</strong> {c.follow_up}</p>}
-        </article>)}</div> : <div className="empty-state">No related cases were returned. Confirm the graph is populated with `DefectCase`, `CrackType`, `Component` and `PotentialCause` nodes, and that relationship names match the import schema.</div>}
-        <div className="limitations"><strong>Limitations</strong><ul>{result.limitations.map((item) => <li key={item}>{item}</li>)}</ul></div>
-      </section>}
-
-      <footer><span>CrackScope</span><span>Built with NVIDIA AI + Neo4j</span><span>Not a substitute for professional engineering assessment.</span></footer>
+      <footer><span>CrackScope</span><span>DeepSeek NVIDIA API + Neo4j Aura</span><span>Decision support only · Not a structural safety assessment</span></footer>
     </main>
   );
 }

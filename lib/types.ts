@@ -1,30 +1,26 @@
 export type ExtractedDefect = {
   crack_type: string | null;
   component: string | null;
-  building_type: string | null;
-  symptoms: string;
-  keywords: string[];
-  uncertainty: string;
+  visual_observation: string;
+  confidence_note: string;
 };
 
-export type RelatedCase = {
+export type MatchingCase = {
   case_id: string;
   building_type: string | null;
-  crack_type: string | null;
-  component: string | null;
-  symptoms: string | null;
-  potential_causes: string[];
-  priority: string | null;
+  observed_symptoms: string | null;
   evidence_status: string | null;
   evidence_notes: string | null;
-  follow_up: string | null;
-  match_reason: string;
+  crack_type: string | null;
+  component: string | null;
+  potential_causes: string[];
 };
 
 export type AnalysisResponse = {
   extracted: ExtractedDefect;
   graph_connected: boolean;
-  related_cases: RelatedCase[];
-  analysis: string;
+  matched_cases: MatchingCase[];
+  potential_causes: string[];
+  message?: string;
   limitations: string[];
 };

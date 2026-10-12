@@ -25,21 +25,25 @@ Copy `.env.example` to `.env.local` for local development and fill in values:
 
 Never prefix secrets with `NEXT_PUBLIC_`; that exposes them to client-side code. Do not commit `.env.local`.
 
-## 2. Prepare the Neo4j graph
+## 2. Existing Neo4j Aura graph schema
 
-This app expects these labels, properties, and relationship types:
+This app queries the existing graph using these exact labels, properties and relationship types:
 
-- `(:DefectCase {case_id, building_type, observed_symptoms, evidence_status, screening_priority, evidence_notes, suggested_follow_up, source_type, potential_causes_unverified})`
-- `(:CrackType {name})`
-- `(:Component {name})`
-- `(:PotentialCause {name})`
-- `(:DefectCase)-[:HAS_CRACK_TYPE]->(:CrackType)`
-- `(:DefectCase)-[:OCCURS_ON]->(:Component)`
-- `(:DefectCase)-[:MAY_BE_ASSOCIATED_WITH]->(:PotentialCause)`
+- `(:Defect_Case {case_id, building_type, observed_symptoms, evidence_status, screening_priority, evidence_notes, suggested_follow_up})`
+- `(:Component {component})`
+- `(:Crack_Type {crack_type})`
+- `(:Potential_cause {potential_causes_unverified})`
+- `(:Defect_Case)-[:What_Component]->(:Component)`
+- `(:Defect_Case)-[:What_Crack]->(:Crack_Type)`
+- `(:Crack_Type)-[:What_Cause]->(:Potential_cause)`
 
-Run `scripts/schema.cypher` in Neo4j Browser. Then import `data/synthetic_crack_defect_cases.csv` using `scripts/import-cases.cypher` if the CSV is available to the Neo4j server through its import directory. Neo4j Aura cannot read a local `file:///` path from your computer; for Aura, upload the CSV to an approved reachable location or use a one-off Python/JavaScript driver import script.
+The frontend accepts an image only. The NVIDIA model selects a crack type and component from the fixed vocabulary in the bundled CSV. The server validates these as canonical values, then performs a parameterised, read-only exact-match query against Aura. It displays the potential causes connected to matching crack types and cases.
 
-The API queries these exact relationship names. If your graph has different names, either update the Cypher in `lib/neo4j.ts` or change the graph to match.
+The app does not initialise or write to the graph. `scripts/schema.cypher` and `scripts/import-cases.cypher` are optional reference scripts only; they are not part of the deployment workflow. Aura cannot read a `file:///` path on your desktop.
+
+## 3. Environment variables
+
+Set `NVIDIA_API_KEY`, `NVIDIA_BASE_URL`, `NVIDIA_MODEL`, `NEO4J_URI`, `NEO4J_USERNAME`, `NEO4J_PASSWORD`, and `NEO4J_DATABASE`. The app does not need `AURA_INSTANCEID` or `AURA_INSTANCENAME`.
 
 ## 3. Run locally
 
@@ -63,7 +67,7 @@ Health endpoint: http://localhost:3000/api/health. It reports whether the NVIDIA
 3. In Project Settings → Environment Variables, add `NVIDIA_API_KEY`, `NVIDIA_BASE_URL`, `NVIDIA_MODEL`, `NEO4J_URI`, `NEO4J_USERNAME`, `NEO4J_PASSWORD`, and `NEO4J_DATABASE` for Preview and Production as appropriate.
 4. Deploy. Vercel detects Next.js automatically; no custom build command should be needed (`npm run build`).
 5. Visit `/api/health`. Confirm `nvidia_configured` is `true` and `neo4j.connected` is `true`.
-6. Try a short text description in the UI.
+6. Upload a clear crack image in the UI.
 
 Your Neo4j database must be reachable from Vercel over the network. For Aura, use the Aura connection URI and credentials. Avoid IP allowlists that block Vercel serverless egress; use a secure supported networking configuration for your deployment.
 
@@ -75,12 +79,11 @@ JSON body:
 
 ```json
 {
-  "description": "Diagonal crack from a window corner in a masonry wall",
   "imageDataUrl": "data:image/jpeg;base64,..."
 }
 ```
 
-`imageDataUrl` is optional. Images must be an image data URL and approximately 3 MB or smaller. Response contains extracted observations, whether the graph was queried, related graph cases, a generated summary, and limitations.
+An image is required and must be an image data URL of approximately 2.8 MB or smaller. The response contains the presumed crack type and component, matching graph cases, potential causes and limitations.
 
 ### `GET /api/health`
 
