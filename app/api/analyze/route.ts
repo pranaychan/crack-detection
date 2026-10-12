@@ -122,11 +122,39 @@ export async function POST(request: NextRequest) {
           ? "The detected crack type and component match the graph vocabulary, but no linked potential causes were found for this combination."
           : undefined;
 
+    const graphQuery = `MATCH (d:Defect_Case)-[:What_Crack]->(ct:Crack_Type)
+MATCH (d)-[:What_Component]->(c:Component)
+MATCH (ct)-[:What_Cause]->(p:Potential_cause)
+WHERE toLower(ct.crack_type) = toLower($crack_type)
+  AND toLower(c.component) = toLower($component)
+RETURN d.case_id AS case_id, d.building_type AS building_type,
+       d.observed_symptoms AS observed_symptoms,
+       d.evidence_status AS evidence_status, d.evidence_notes AS evidence_notes,
+       ct.crack_type AS crack_type, c.component AS component,
+       collect(DISTINCT p.potential_causes_unverified) AS potential_causes
+ORDER BY case_id ASC
+LIMIT 50`;
+
     return NextResponse.json({
       extracted,
       graph_connected: graphConnected,
       matched_cases: matchedCases,
       potential_causes: potentialCauses,
+      pipeline: {
+        ai_input: {
+          image_received: true,
+          image_format: imageDataUrl.slice(5, imageDataUrl.indexOf(";")),
+          image_data_sent_to_model: true,
+          instruction: "Identify the visually observed crack type and component in plain language; do not force labels into the graph vocabulary.",
+        },
+        ai_output: extracted,
+        neo4j_query: graphQuery,
+        neo4j_parameters: extracted.graph_crack_type && extracted.graph_component
+          ? { crack_type: extracted.graph_crack_type, component: extracted.graph_component }
+          : null,
+        neo4j_lookup_performed: Boolean(extracted.graph_crack_type && extracted.graph_component && isNeo4jConfigured() && graphConnected),
+        neo4j_output: matchedCases,
+      },
       ...(message ? { message } : {}),
       limitations: [
         "Potential causes are unverified associations stored in the knowledge graph, not confirmed diagnoses.",

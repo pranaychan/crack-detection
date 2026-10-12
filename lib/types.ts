@@ -25,4 +25,14 @@ export type AnalysisResponse = {
   potential_causes: string[];
   message?: string;
   limitations: string[];
+  pipeline?: PipelineDebug;
+};
+
+export type PipelineDebug = {
+  ai_input: { image_received: boolean; image_format: string; image_data_sent_to_model: boolean; instruction: string };
+  ai_output: ExtractedDefect;
+  neo4j_query: string;
+  neo4j_parameters: { crack_type: string; component: string } | null;
+  neo4j_lookup_performed: boolean;
+  neo4j_output: MatchingCase[];
 };

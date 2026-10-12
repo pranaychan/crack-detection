@@ -97,3 +97,8 @@ Returns application status, whether the NVIDIA API key exists, and Neo4j connect
 - The app only retrieves graph cases; it does not write LLM-generated diagnoses into Neo4j.
 - Do not rely on the synthetic `screening_priority` as a validated risk rating.
 - Add authentication, rate limiting, monitoring, and privacy review before public production use.
+
+
+## Pipeline inspector UI
+
+The homepage has four tabs: **Image input**, **AI prediction**, **Data sent to Neo4j**, and **Output from Neo4j**. After an analysis completes, the API response includes safe pipeline-debug fields used to populate these tabs: image metadata/instruction, structured AI output, the parameterised Cypher query and graph parameters, and the returned case rows. The original image bytes and API credentials are not echoed in the debug response. The UI uses a high-contrast navy/blue/acid-yellow palette.
