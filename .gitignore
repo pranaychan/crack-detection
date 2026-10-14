@@ -1,7 +1,67 @@
+# Dependencies
 node_modules/
+
+# Next.js
 .next/
+out/
+build/
+dist/
+
+# Environment variables and secrets
 .env
-.env.local
+.env.*
+!.env.example
+
+# Deployment
 .vercel/
-.DS_Store
+.netlify/
+
+# Logs
+logs/
+*.log
 npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# TypeScript
+*.tsbuildinfo
+next-env.d.ts
+
+# Testing and coverage
+coverage/
+.nyc_output/
+
+# Local databases and generated data
+*.sqlite
+*.sqlite3
+*.db
+uploads/
+temp/
+tmp/
+
+# ML models and large generated artefacts
+*.pt
+*.pth
+*.onnx
+*.safetensors
+checkpoints/
+runs/
+
+# Python artefacts, if used for ML scripts
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ipynb_checkpoints/
+
+# Operating systems
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*.swo

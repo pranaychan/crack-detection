@@ -29,11 +29,37 @@ const COMPONENTS = [
 ];
 
 function parseJsonObject(text: string): Record<string, unknown> {
-  const cleaned = text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
+  const cleaned = text
+    .replace(/^\s*```(?:json)?\s*/i, "")
+    .replace(/\s*```\s*$/i, "")
+    .trim();
+
+  if (!cleaned) {
+    throw new Error("The NVIDIA model returned an empty response.");
+  }
+
+  // Models sometimes add a short preamble or Markdown fences despite the JSON-only prompt.
   const start = cleaned.indexOf("{");
   const end = cleaned.lastIndexOf("}");
-  if (start < 0 || end <= start) throw new Error("The AI returned an unexpected format. Please try another image.");
-  return JSON.parse(cleaned.slice(start, end + 1));
+  if (start < 0 || end < start) {
+    throw new Error(
+      "The NVIDIA model response did not contain a JSON object. " +
+      "Check the model output format and whether the configured model supports image input."
+    );
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(cleaned.slice(start, end + 1));
+  } catch {
+    throw new Error("The NVIDIA model returned malformed JSON. Please retry the analysis.");
+  }
+
+  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error("The NVIDIA model response was JSON, but not a JSON object.");
+  }
+
+  return parsed as Record<string, unknown>;
 }
 
 function canonicalChoice(value: unknown, options: string[]): string | null {
@@ -50,7 +76,7 @@ function cleanLabel(value: unknown): string | null {
 
 async function extractFromImage(imageDataUrl: string): Promise<ExtractedDefect> {
   const client = getNvidiaClient();
-  const prompt = `Inspect this construction-defect image. Report the crack type and affected building component that you actually observe, using concise engineering terms. Do NOT force your answer to match a predefined list. If the observed crack type or component is not represented by the lists below, return your best plain-language label anyway.\n\nCrack types represented in the knowledge graph: ${JSON.stringify(CRACK_TYPES)}\nComponents represented in the knowledge graph: ${JSON.stringify(COMPONENTS)}\n\nReturn valid JSON only with keys detected_crack_type, detected_component, visual_observation, confidence_note. Use null only if the image does not support a reasonable identification. Do not infer a confirmed cause, hidden damage, or structural safety from the image.`;
+  const prompt = `Inspect the attached construction-defect image. Identify only what is visually supported. Do not infer a confirmed cause, hidden damage, or structural safety.\n\nUse concise engineering terms. Do not force a label to match the lists: if no listed label fits, return the best plain-language label. If the image does not support a reasonable identification, use null for that field.\n\nCrack types represented in the knowledge graph: ${JSON.stringify(CRACK_TYPES)}\nComponents represented in the knowledge graph: ${JSON.stringify(COMPONENTS)}\n\nReturn exactly one valid JSON object and no Markdown, code fences, preamble, or text after it. Use these four keys with these value types: detected_crack_type (string or null), detected_component (string or null), visual_observation (string), confidence_note (string). Example structure: {"detected_crack_type":"Vertical crack","detected_component":"RCC column","visual_observation":"A visible vertical crack on a concrete surface.","confidence_note":"Identification is limited to visible image features."}`;
   const response = await client.chat.completions.create({
     model: getModelName(),
     temperature: 0.1,
@@ -63,9 +89,32 @@ async function extractFromImage(imageDataUrl: string): Promise<ExtractedDefect> 
       ] as never },
     ],
   });
-  const content = response.choices[0]?.message?.content;
-  if (typeof content !== "string" || !content.trim()) throw new Error("The NVIDIA model returned an empty response. Check that the configured model supports image input.");
-  const raw = parseJsonObject(content);
+  const choice = response.choices?.[0];
+  const content = choice?.message?.content;
+  if (typeof content !== "string" || !content.trim()) {
+    const finishReason = choice?.finish_reason ?? "unknown";
+    throw new Error(
+      `The NVIDIA model returned no text content (finish_reason=${finishReason}). ` +
+      "Check model image-input support and the provider response."
+    );
+  }
+
+  let raw: Record<string, unknown>;
+  try {
+    raw = parseJsonObject(content);
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : "Unknown response parsing error.";
+    // Log only a short text preview for debugging; never log the image data URL or API key.
+    console.error(JSON.stringify({
+      event: "nvidia_response_parse_failed",
+      model: response.model,
+      finish_reason: choice?.finish_reason ?? "unknown",
+      content_length: content.length,
+      content_preview: content.slice(0, 300),
+      reason,
+    }));
+    throw new Error(reason);
+  }
   const detectedCrack = cleanLabel(raw.detected_crack_type ?? raw.crack_type);
   const detectedComponent = cleanLabel(raw.detected_component ?? raw.component);
   return {
