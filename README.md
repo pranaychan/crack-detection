@@ -18,6 +18,7 @@ Copy `.env.example` to `.env.local` for local development and fill in values:
 - `NVIDIA_API_KEY`: your NVIDIA API key
 - `NVIDIA_BASE_URL`: usually `https://integrate.api.nvidia.com/v1`
 - `NVIDIA_MODEL`: defaults to `deepseek-ai/deepseek-v4.1-flash`
+- `NVIDIA_TIMEOUT_MS`: NVIDIA request timeout in milliseconds; defaults to `40000` to leave time for the Aura query and response before Vercel's 60-second limit
 - `NEO4J_URI`: Aura `neo4j+s://...` or local `bolt://localhost:7687`
 - `NEO4J_USERNAME`
 - `NEO4J_PASSWORD`
@@ -102,3 +103,10 @@ Returns application status, whether the NVIDIA API key exists, and Neo4j connect
 ## Pipeline inspector UI
 
 The homepage has four tabs: **Image input**, **AI prediction**, **Data sent to Neo4j**, and **Output from Neo4j**. After an analysis completes, the API response includes safe pipeline-debug fields used to populate these tabs: image metadata/instruction, structured AI output, the parameterised Cypher query and graph parameters, and the returned case rows. The original image bytes and API credentials are not echoed in the debug response. The UI uses a high-contrast navy/blue/acid-yellow palette.
+
+
+## Request diagnostics
+
+The `/api/analyze` route writes structured JSON logs for request validation, NVIDIA image analysis, Neo4j query execution, and total request completion/failure. Logs include a request ID, stage duration, elapsed time, and non-secret error details. They never log the image contents, API key, or Neo4j password. Successful responses include a `diagnostics` object with per-stage timings and total server processing time; the UI displays it in the Neo4j output tab. NVIDIA SDK retries are disabled and the request timeout defaults to 40 seconds (`NVIDIA_TIMEOUT_MS`) to avoid spending the entire Vercel execution window retrying. Neo4j query timeout is 10 seconds.
+
+If Vercel still reports a hard 60-second timeout, look for the last `crackscope_stage_started` log with the same `request_id`. If the last stage is `nvidia_image_analysis`, NVIDIA is the bottleneck; if it is `neo4j_query`, investigate Aura/query latency. A hard platform termination may prevent the route from returning its own diagnostic JSON, but the structured logs should still identify the last stage that started.

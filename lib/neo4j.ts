@@ -15,7 +15,7 @@ function getDriver(): Driver {
     driver = neo4j.driver(
       process.env.NEO4J_URI!,
       neo4j.auth.basic(process.env.NEO4J_USERNAME!, process.env.NEO4J_PASSWORD!),
-      { maxConnectionPoolSize: 5, connectionAcquisitionTimeout: 8000 }
+      { maxConnectionPoolSize: 5, connectionAcquisitionTimeout: 5000, connectionTimeout: 5000 }
     );
   }
   return driver;
@@ -49,7 +49,8 @@ export async function findMatchingCases(input: {
          collect(DISTINCT p.potential_causes_unverified) AS potential_causes
        ORDER BY case_id ASC
        LIMIT 50`,
-      { crack_type: input.crackType, component: input.component }
+      { crack_type: input.crackType, component: input.component },
+      { timeout: 10000 }
     );
 
     return result.records.map((record) => ({

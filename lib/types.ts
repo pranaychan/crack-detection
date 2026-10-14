@@ -26,6 +26,13 @@ export type AnalysisResponse = {
   message?: string;
   limitations: string[];
   pipeline?: PipelineDebug;
+  request_id?: string;
+  diagnostics?: {
+    timings_ms: Record<string, number>;
+    total_ms: number;
+    completed_stage: string;
+    nvidia_timeout_ms: number;
+  };
 };
 
 export type PipelineDebug = {

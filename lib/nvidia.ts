@@ -9,6 +9,10 @@ export function getNvidiaClient(): OpenAI {
     client = new OpenAI({
       apiKey,
       baseURL: process.env.NVIDIA_BASE_URL || "https://integrate.api.nvidia.com/v1",
+      // Prevent SDK retries from consuming the entire serverless execution window.
+      // A clear timeout lets the route report which stage failed.
+      timeout: Number(process.env.NVIDIA_TIMEOUT_MS || 40000),
+      maxRetries: 0,
     });
   }
   return client;
