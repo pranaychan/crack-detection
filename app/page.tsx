@@ -53,61 +53,36 @@ export default function Home() {
     }
   }
 
-  const STAGE_LABELS: Record<TraceStep["stage"], string> = {
-    validate_image: "Validate image",
-    classify_defect: "Classify defect (NVIDIA)",
-    knowledge_graph: "Query knowledge graph",
-    explain: "Explain (NVIDIA)",
-  };
-
   return (
     <main className="shell">
-      <header>
-        <span className="logo">C</span>
-        <div>
-          <h1>CrackScope</h1>
-          <p className="muted">Image → defect → knowledge graph → likely cause</p>
-        </div>
-      </header>
+      <h1>CrackScope</h1>
+      <p className="muted">Upload an image of a defect. It is classified by NVIDIA, looked up in the knowledge graph, and explained.</p>
 
-      <form className="card" onSubmit={submit}>
-        <label className={`drop ${image ? "filled" : ""}`}>
-          <input type="file" accept="image/jpeg,image/png,image/webp,image/gif" onChange={onImageChange} />
-          {image
-            ? <img src={image} alt="Selected upload" />
-            : <span><strong>Choose an image</strong><small>JPEG, PNG, WebP or GIF · up to 2.8 MB</small></span>}
-        </label>
-        <button type="submit" disabled={!image || loading}>
-          {loading && <i className="spinner" />}{loading ? "Analysing…" : "Analyse image"}
-        </button>
+      <form onSubmit={submit}>
+        <input type="file" accept="image/jpeg,image/png,image/webp,image/gif" onChange={onImageChange} />
+        {image && <img className="preview" src={image} alt="Selected upload" />}
+        <button type="submit" disabled={!image || loading}>{loading ? "Analysing…" : "Analyse image"}</button>
       </form>
 
-      {error && <p className="card error" role="alert">{error}</p>}
+      {error && <p className="error" role="alert">{error}</p>}
 
       {result && (
-        <section className="card result">
-          <span className="label">Detected defect</span>
-          <h2><span className={`badge ${result.defect === "No defect" ? "none" : ""}`}>{result.defect}</span></h2>
-          <span className="label">What could have happened</span>
+        <section className="result">
+          <h2>{result.defect}</h2>
           <p>{result.explanation}</p>
-          <small className="muted">Unverified decision support, not a structural safety assessment.</small>
+          <p className="muted">Unverified decision support, not a structural safety assessment.</p>
         </section>
       )}
 
       {trace.length > 0 && (
-        <details className="card trace">
-          <summary>Pipeline trace <small className="muted">· request {requestId}</small></summary>
-          <ol>
-            {trace.map((s) => (
-              <li key={s.stage} className={s.status}>
-                <div className="step-head">
-                  <strong>{STAGE_LABELS[s.stage]}</strong>
-                  <span className="pill">{s.status} · {s.ms} ms</span>
-                </div>
-                <pre>{JSON.stringify(s.detail, null, 2)}</pre>
-              </li>
-            ))}
-          </ol>
+        <details className="trace">
+          <summary>Pipeline trace · request {requestId}</summary>
+          {trace.map((s) => (
+            <div key={s.stage} className={`step ${s.status}`}>
+              <strong>{s.stage}</strong> <span>{s.status} · {s.ms} ms</span>
+              <pre>{JSON.stringify(s.detail, null, 2)}</pre>
+            </div>
+          ))}
         </details>
       )}
     </main>

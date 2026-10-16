@@ -15,31 +15,23 @@ function getDriver(): Driver {
   return driver;
 }
 
-export type Cause = { cause_id: string; properties: Record<string, unknown> };
-
-// Schema: (:Cause)-[:MAY_CAUSE]->(:Defect). The defect label from the vision model
-// is matched to Defect.defect_id ignoring case and "_", "-", "/" (e.g. "Rebar Corrosion" ~ "rebar_corrosion").
-// The caller passes the KG name (see toKgDefect), e.g. "Leakage/Dampness".
-// The KG is under development: this query is the only thing that should need to change.
-export const CAUSE_QUERY = `
-MATCH (c:Cause)-[:MAY_CAUSE]->(d:Defect)
-WHERE replace(replace(replace(toLower(d.defect_id), '_', ' '), '-', ' '), '/', ' ')
-    = replace(replace(replace(toLower($defect), '_', ' '), '-', ' '), '/', ' ')
-RETURN c.cause_id AS cause_id, properties(c) AS properties
+// The knowledge graph is under development: this query and the shape of the
+// returned paths are the only things that should need to change.
+export const CAUSE_PATH_QUERY = `
+MATCH path = (ct:Crack_Type)-[:What_Cause]->(p:Potential_cause)
+WHERE toLower(ct.crack_type) = toLower($defect)
+RETURN ct.crack_type + ' -[What_Cause]-> ' + p.potential_causes_unverified AS path
 LIMIT 25`;
 
-/** Returns the possible causes linked to the given defect. */
-export async function findCauses(defect: string): Promise<Cause[]> {
+/** Returns the KG paths (as readable strings) that start from the given defect. */
+export async function findCausePaths(defect: string): Promise<string[]> {
   const session = getDriver().session({
     database: process.env.NEO4J_DATABASE || "neo4j",
     defaultAccessMode: neo4j.session.READ,
   });
   try {
-    const result = await session.run(CAUSE_QUERY, { defect }, { timeout: 10000 });
-    return result.records.map((r) => ({
-      cause_id: String(r.get("cause_id")),
-      properties: r.get("properties") as Record<string, unknown>,
-    }));
+    const result = await session.run(CAUSE_PATH_QUERY, { defect }, { timeout: 10000 });
+    return result.records.map((r) => String(r.get("path")));
   } finally {
     await session.close();
   }

@@ -1,0 +1,13 @@
+{
+  "case_id": "CRK999",
+  "building_type": "Residential building",
+  "component": "RCC beam",
+  "crack_type": "Flexural crack",
+  "observed_symptoms": "Newly recorded crack near mid-span",
+  "evidence_status": "Observed",
+  "potential_causes_unverified": "Possible excessive bending demand; unverified",
+  "screening_priority": "Medium",
+  "evidence_notes": "Example record; replace with verified project evidence",
+  "suggested_follow_up": "Have a qualified structural engineer assess the crack",
+  "source_type": "Manual entry"
+}
