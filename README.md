@@ -1,112 +1,57 @@
-# CrackScope — Construction Crack Analysis + Neo4j Knowledge Graph
+# CrackScope
 
-A Next.js application designed for Vercel. It uses NVIDIA's OpenAI-compatible API (`deepseek-ai/deepseek-v4.1-flash`) to extract crack observations from text and optional images, retrieves related cases from Neo4j using fixed parameterised Cypher, and asks the model to summarise the retrieved evidence.
+Next.js app. The user provides an **image**, a **defect type** (dropdown) and how many causes to use (**top k**); a metadata field exists in the UI but is disabled for now.
 
-> Safety: this is a prototype for decision support. It does not certify structural safety or prove root causes. The bundled cases are synthetic and must not be presented as real inspections.
+1. The image and defect are stored in Supabase.
+2. Neo4j Aura returns the top k possible causes of that defect: `(:Cause)-[:MAY_CAUSE]->(:Defect {defect_id: "DEF_…"})`.
+3. NVIDIA gets the image, the defect and those causes and writes a short prediction of what could have happened.
 
-## Stack
+The NVIDIA model does not identify the defect. The knowledge graph can be edited at `/graph`.
 
-- Next.js App Router + TypeScript
-- NVIDIA API through the OpenAI JavaScript SDK
-- Neo4j official JavaScript driver
-- Vercel deployment
-
-## 1. Configure environment variables
-
-Copy `.env.example` to `.env.local` for local development and fill in values:
-
-- `NVIDIA_API_KEY`: your NVIDIA API key
-- `NVIDIA_BASE_URL`: usually `https://integrate.api.nvidia.com/v1`
-- `NVIDIA_MODEL`: defaults to `deepseek-ai/deepseek-v4.1-flash`
-- `NVIDIA_TIMEOUT_MS`: NVIDIA request timeout in milliseconds; defaults to `40000` to leave time for the Aura query and response before Vercel's 60-second limit
-- `NEO4J_URI`: Aura `neo4j+s://...` or local `bolt://localhost:7687`
-- `NEO4J_USERNAME`
-- `NEO4J_PASSWORD`
-- `NEO4J_DATABASE`: usually `neo4j`
-
-Never prefix secrets with `NEXT_PUBLIC_`; that exposes them to client-side code. Do not commit `.env.local`.
-
-## 2. Existing Neo4j Aura graph schema
-
-This app queries the existing graph using these exact labels, properties and relationship types:
-
-- `(:Defect_Case {case_id, building_type, observed_symptoms, evidence_status, screening_priority, evidence_notes, suggested_follow_up})`
-- `(:Component {component})`
-- `(:Crack_Type {crack_type})`
-- `(:Potential_cause {potential_causes_unverified})`
-- `(:Defect_Case)-[:What_Component]->(:Component)`
-- `(:Defect_Case)-[:What_Crack]->(:Crack_Type)`
-- `(:Crack_Type)-[:What_Cause]->(:Potential_cause)`
-
-The frontend accepts an image only. NVIDIA returns the crack type and component it actually observes, in plain language, even if a label is not in the knowledge graph vocabulary. The server separately checks whether both labels match supported graph values. Only then does it run a parameterised, read-only exact-match query against Aura. If either label is not represented, the app displays the model detection and explains that no graph lookup was performed instead of silently forcing the result into a different label.
-
-The app does not initialise or write to the graph. `scripts/schema.cypher` and `scripts/import-cases.cypher` are optional reference scripts only; they are not part of the deployment workflow. Aura cannot read a `file:///` path on your desktop.
-
-## 3. Environment variables
-
-Set `NVIDIA_API_KEY`, `NVIDIA_BASE_URL`, `NVIDIA_MODEL`, `NEO4J_URI`, `NEO4J_USERNAME`, `NEO4J_PASSWORD`, and `NEO4J_DATABASE`. The app does not need `AURA_INSTANCEID` or `AURA_INSTANCENAME`.
-
-## 3. Run locally
-
-Requires Node.js 20 or later recommended.
+## Setup
 
 ```bash
 npm install
-cp .env.example .env.local
-# Edit .env.local with your actual credentials
-npm run dev
+cp .env.example .env.local   # fill in credentials
+npm run dev                  # http://localhost:3000
 ```
 
-Open http://localhost:3000.
+`GET /api/health` reports whether the NVIDIA and Neo4j variables are set.
 
-Health endpoint: http://localhost:3000/api/health. It reports whether the NVIDIA key is configured and whether Neo4j can be reached. It does not return credentials.
+## Image storage (Supabase free tier)
 
-## 4. Deploy to Vercel
+1. Create a free project at supabase.com.
+2. Run `scripts/supabase.sql` in the SQL editor. It creates a private `inspection-images` bucket and an `inspections` table (`id`, `image_path`, `defect`, `created_at`) with RLS on and no policies, so only the server key can access them.
+3. Set `SUPABASE_URL` and `SUPABASE_SERVICE_KEY` (service role / secret key, server-side only) and optionally `SUPABASE_BUCKET`.
 
-1. Push this project to a GitHub repository.
-2. In Vercel, choose **Add New → Project** and import the repository.
-3. In Project Settings → Environment Variables, add `NVIDIA_API_KEY`, `NVIDIA_BASE_URL`, `NVIDIA_MODEL`, `NEO4J_URI`, `NEO4J_USERNAME`, `NEO4J_PASSWORD`, and `NEO4J_DATABASE` for Preview and Production as appropriate.
-4. Deploy. Vercel detects Next.js automatically; no custom build command should be needed (`npm run build`).
-5. Visit `/api/health`. Confirm `nvidia_configured` is `true` and `neo4j.connected` is `true`.
-6. Upload a clear crack image in the UI.
+The image and the selected defect id (e.g. `DEF_HONEYCOMBING`) are stored as soon as the input is validated, even if later stages fail. If Supabase isn't configured the step is skipped; if it fails, the trace shows the error and the analysis continues. View the collected data in the Supabase dashboard (Storage and Table editor).
 
-Your Neo4j database must be reachable from Vercel over the network. For Aura, use the Aura connection URI and credentials. Avoid IP allowlists that block Vercel serverless egress; use a secure supported networking configuration for your deployment.
+## Graph editor (`/graph`)
 
-## 5. API
+Create, edit and delete nodes (Defect, Cause, Symptom, Standard, Clause, Source, Case) and add or remove relationships between them. Properties are free-form key/value pairs, so the editor doesn't depend on your property names; the id property (`defect_id`, `cause_id`, …) is fixed once a node exists. Saving replaces all of a node's properties with what is shown; deleting a node also deletes its relationships (with a confirmation).
 
-### `POST /api/analyze`
+This page and `/api/graph` are public: there is no login, so anyone with the URL can change or delete graph data. Labels and relationship types are whitelisted in `lib/graph-schema.ts` (update it if your schema changes), and user input only reaches Cypher as parameters. The Neo4j user must have write access.
 
-JSON body:
+## Where things live
 
-```json
-{
-  "imageDataUrl": "data:image/jpeg;base64,..."
-}
-```
+- `lib/defects.ts` – the defect dropdown list. Each `id` must equal the `Defect.defect_id` in the graph.
+- `lib/neo4j.ts` – the KG query (`CAUSE_QUERY`). "Top k" is currently the first k causes ordered by `cause_id` because the graph has no ranking property; change the `ORDER BY` when it does.
+- `lib/nvidia.ts` – the NVIDIA chat call.
+- `lib/graph.ts`, `lib/graph-schema.ts`, `app/api/graph/route.ts`, `app/graph/page.tsx` – the graph editor.
+- `lib/storage.ts` – Supabase image storage.
+- `app/api/analyze/route.ts` – the pipeline (validate → store image → KG → predict).
 
-An image is required and must be an image data URL of approximately 2.8 MB or smaller. The response contains the presumed crack type and component, matching graph cases, potential causes and limitations.
+## Time limits
 
-### `GET /api/health`
+Vercel kills a function at `maxDuration` (60 s here) and returns a non-JSON `FUNCTION_INVOCATION_TIMEOUT` 504. The pipeline therefore works inside a 55 s budget: Neo4j and Supabase calls get at most 8 s each (run in parallel), and the NVIDIA prediction gets what remains, up to `NVIDIA_TIMEOUT_MS` (default 40 s). If a stage times out, the response is JSON naming that stage.
 
-Returns application status, whether the NVIDIA API key exists, and Neo4j connectivity/case count. It does not expose secret values.
+## Debugging
 
-## Design / security notes
+Every response (success or failure) includes a `trace`: each stage's status, duration and inputs/outputs (validated input, KG query/parameters/causes). The UI shows it under "Pipeline trace". The server logs one JSON line per stage with the same `request_id`; images and keys are never logged.
 
-- NVIDIA and Neo4j credentials are only read by server-side code.
-- User input is passed as parameters to a fixed, read-only Cypher query; users cannot submit arbitrary Cypher.
-- The model's extracted fields are treated as search hints, not trusted ground truth.
-- The app only retrieves graph cases; it does not write LLM-generated diagnoses into Neo4j.
-- Do not rely on the synthetic `screening_priority` as a validated risk rating.
-- Add authentication, rate limiting, monitoring, and privacy review before public production use.
+- Bad input → `validate_input` failed (image type/size, unknown defect id, k out of range).
+- Image not saved → check the `store_image` step (it shows the Supabase HTTP status).
+- No causes → check `knowledge_graph`. When nothing matches, the trace also lists every `Defect` node in the graph (`defects_in_graph`) so you can compare ids with `lib/defects.ts`. A KG failure does not stop the pipeline; the UI warns that the prediction used the image alone.
+- NVIDIA problems → `explain` shows the HTTP status, model and host, or the timeout.
 
-
-## Pipeline inspector UI
-
-The homepage has four tabs: **Image input**, **AI prediction**, **Data sent to Neo4j**, and **Output from Neo4j**. After an analysis completes, the API response includes safe pipeline-debug fields used to populate these tabs: image metadata/instruction, structured AI output, the parameterised Cypher query and graph parameters, and the returned case rows. The original image bytes and API credentials are not echoed in the debug response. The UI uses a high-contrast navy/blue/acid-yellow palette.
-
-
-## Request diagnostics
-
-The `/api/analyze` route writes structured JSON logs for request validation, NVIDIA image analysis, Neo4j query execution, and total request completion/failure. Logs include a request ID, stage duration, elapsed time, and non-secret error details. They never log the image contents, API key, or Neo4j password. Successful responses include a `diagnostics` object with per-stage timings and total server processing time; the UI displays it in the Neo4j output tab. NVIDIA SDK retries are disabled and the request timeout defaults to 40 seconds (`NVIDIA_TIMEOUT_MS`) to avoid spending the entire Vercel execution window retrying. Neo4j query timeout is 10 seconds.
-
-If Vercel still reports a hard 60-second timeout, look for the last `crackscope_stage_started` log with the same `request_id`. If the last stage is `nvidia_image_analysis`, NVIDIA is the bottleneck; if it is `neo4j_query`, investigate Aura/query latency. A hard platform termination may prevent the route from returning its own diagnostic JSON, but the structured logs should still identify the last stage that started.
+Potential causes are unverified. Not a structural safety assessment.

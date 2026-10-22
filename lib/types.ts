@@ -1,45 +1,25 @@
-export type ExtractedDefect = {
-  crack_type: string | null;
-  component: string | null;
-  graph_crack_type: string | null;
-  graph_component: string | null;
-  visual_observation: string;
-  confidence_note: string;
-};
+import type { Cause } from "@/lib/neo4j";
 
-export type MatchingCase = {
-  case_id: string;
-  building_type: string | null;
-  observed_symptoms: string | null;
-  evidence_status: string | null;
-  evidence_notes: string | null;
-  crack_type: string | null;
-  component: string | null;
-  potential_causes: string[];
+export type TraceStep = {
+  stage: "validate_input" | "store_image" | "knowledge_graph" | "explain";
+  status: "ok" | "skipped" | "failed";
+  ms: number;
+  /** What went in / came out of this stage, or the error message. */
+  detail: Record<string, unknown>;
 };
 
 export type AnalysisResponse = {
-  extracted: ExtractedDefect;
-  graph_connected: boolean;
-  matched_cases: MatchingCase[];
-  potential_causes: string[];
-  message?: string;
-  limitations: string[];
-  pipeline?: PipelineDebug;
-  request_id?: string;
-  diagnostics?: {
-    timings_ms: Record<string, number>;
-    total_ms: number;
-    completed_stage: string;
-    nvidia_timeout_ms: number;
-  };
+  request_id: string;
+  defect: string;
+  /** The top-k knowledge-graph causes that were given to the model (empty if none / KG unavailable). */
+  causes: Cause[];
+  explanation: string;
+  trace: TraceStep[];
 };
 
-export type PipelineDebug = {
-  ai_input: { image_received: boolean; image_format: string; image_data_sent_to_model: boolean; instruction: string };
-  ai_output: ExtractedDefect;
-  neo4j_query: string;
-  neo4j_parameters: { crack_type: string; component: string } | null;
-  neo4j_lookup_performed: boolean;
-  neo4j_output: MatchingCase[];
+export type AnalysisError = {
+  request_id: string;
+  error: string;
+  failed_stage: TraceStep["stage"];
+  trace: TraceStep[];
 };
