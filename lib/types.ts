@@ -1,4 +1,5 @@
-import type { Cause } from "@/lib/neo4j";
+import type { PipelineId } from "@/lib/pipelines";
+import type { RankedCause } from "@/lib/retrieval/types";
 
 export type TraceStep = {
   stage: "validate_input" | "store_image" | "knowledge_graph" | "explain";
@@ -11,8 +12,10 @@ export type TraceStep = {
 export type AnalysisResponse = {
   request_id: string;
   defect: string;
-  /** The top-k knowledge-graph causes that were given to the model (empty if none / KG unavailable). */
-  causes: Cause[];
+  /** Pipeline that produced `causes` (defaults to "graph" when the request does not name one). */
+  pipeline: PipelineId;
+  /** The causes given to the model, best first, each with its score and evidence (empty if none / KG unavailable). */
+  causes: RankedCause[];
   explanation: string;
   trace: TraceStep[];
 };

@@ -35,11 +35,27 @@ This page and `/api/graph` are public: there is no login, so anyone with the URL
 ## Where things live
 
 - `lib/defects.ts` – the defect dropdown list. Each `id` must equal the `Defect.defect_id` in the graph.
-- `lib/neo4j.ts` – the KG query (`CAUSE_QUERY`). "Top k" is currently the first k causes ordered by `cause_id` because the graph has no ranking property; change the `ORDER BY` when it does.
+- `lib/retrieval/` – candidate retrieval, scoring and ranking (see "Pipelines and top-k ranking").
+- `lib/pipelines.ts` – the four pipelines (navbar + routes). `components/InspectionPage.tsx` is the shared UI; `/`, `/contextual`, `/semantic`, `/hybrid` each render it with a different pipeline.
 - `lib/nvidia.ts` – the NVIDIA chat call.
 - `lib/graph.ts`, `lib/graph-schema.ts`, `app/api/graph/route.ts`, `app/graph/page.tsx` – the graph editor.
 - `lib/storage.ts` – Supabase image storage.
 - `app/api/analyze/route.ts` – the pipeline (validate → store image → KG → predict).
+
+## Pipelines and top-k ranking
+
+`POST /api/analyze` accepts optional `pipeline` (`graph` default, `contextual`, `semantic`, `hybrid`) and `metadata` (inspector notes, ≤1000 chars; ignored by `graph`).
+
+Causes are ranked by `score = Σ weight·value / Σ weight of applicable signals` (signals are 0..1; weights and minimum scores are in `lib/retrieval/config.ts`, overridable with the `RETRIEVAL_CONFIG` env JSON). A signal is applicable only if the query supplies the information and at least one candidate has data for it; a candidate with no data scores 0 for it, never a default. Ties break by support, then `cause_id`. Fewer than k causes are returned when the rest fall below the pipeline's minimum score. Duplicates (same id or identical text) are removed; each result carries its signals, supporting cases, symptoms and sources.
+
+| Pipeline | Candidates | Signals |
+|---|---|---|
+| Graph-Based | `(:Cause)-[:MAY_CAUSE]->(:Defect)` | defect link, support (cases + sources) |
+| Contextual Ranking | same | defect, component, symptom similarity, support |
+| Semantic Retrieval | all causes, by text similarity of cause text and linked case text | semantic |
+| Hybrid Retrieval | union of the two | all five |
+
+Semantic similarity uses `NVIDIA_EMBEDDING_MODEL` (default `nvidia/nv-embedqa-e5-v5`) on the existing NVIDIA endpoint, cached in memory; nothing is written to Neo4j. If the call fails it falls back to TF-IDF cosine and the trace reports `method: lexical_tfidf` and why. The retrieval code is read-only and also understands the `Defect_Case` / `Crack_Type` / `Component` / `Potential_cause` schema from `scripts/import-cases.cypher` when those labels exist.
 
 ## Time limits
 
