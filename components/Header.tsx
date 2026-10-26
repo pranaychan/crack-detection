@@ -1,7 +1,8 @@
 import Link from "next/link";
-import { PIPELINES, type PipelineId } from "@/lib/pipelines";
+import { MODELS, type ModelId } from "@/lib/models";
 
-export function Header({ active }: { active: PipelineId | "graph" }) {
+export function Header({ model, view }: { model: ModelId; view: "analyse" | "graph" }) {
+  const current = MODELS.find((m) => m.id === model)!;
   return (
     <header>
       <span className="logo">C</span>
@@ -9,11 +10,14 @@ export function Header({ active }: { active: PipelineId | "graph" }) {
         <h1>CrackScope</h1>
         <p className="muted">Image + defect type → knowledge graph → likely cause</p>
       </div>
-      <nav aria-label="Pipelines">
-        {PIPELINES.map((p) => (
-          <Link key={p.id} href={p.href} data-p={p.id} className={active === p.id ? "on" : ""}>{p.label}</Link>
+      <nav aria-label="Models" className="models">
+        {MODELS.map((m) => (
+          <Link key={m.id} href={m.href} data-p={m.id} className={m.id === model ? "on" : ""}>{m.label}</Link>
         ))}
-        <Link href="/graph" className={active === "graph" ? "on" : ""}>Graph editor</Link>
+      </nav>
+      <nav aria-label={`${current.label} views`} className="views">
+        <Link href={current.href} className={view === "analyse" ? "on" : ""}>Analyse</Link>
+        <Link href={current.graphHref} className={view === "graph" ? "on" : ""}>Graph editor</Link>
       </nav>
     </header>
   );

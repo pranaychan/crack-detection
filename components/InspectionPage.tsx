@@ -3,14 +3,11 @@
 import { ChangeEvent, FormEvent, useState } from "react";
 import { Header } from "@/components/Header";
 import { DEFAULT_TOP_K, DEFECTS, MAX_TOP_K } from "@/lib/defects";
-import { PIPELINES, type PipelineId } from "@/lib/pipelines";
 import type { AnalysisError, AnalysisResponse, TraceStep } from "@/lib/types";
 
 const MAX_BYTES = 2.8 * 1024 * 1024;
 
-export function InspectionPage({ pipeline }: { pipeline: PipelineId }) {
-  const meta = PIPELINES.find((p) => p.id === pipeline)!;
-  const usesMetadata = pipeline !== "graph";
+export function InspectionPage() {
   const [image, setImage] = useState<string>();
   const [defect, setDefect] = useState("");
   const [k, setK] = useState(DEFAULT_TOP_K);
@@ -19,7 +16,6 @@ export function InspectionPage({ pipeline }: { pipeline: PipelineId }) {
   const [result, setResult] = useState<AnalysisResponse>();
   const [trace, setTrace] = useState<TraceStep[]>([]);
   const [requestId, setRequestId] = useState("");
-  const [metadata, setMetadata] = useState("");
 
   function onImageChange(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -41,7 +37,7 @@ export function InspectionPage({ pipeline }: { pipeline: PipelineId }) {
       const res = await fetch("/api/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ imageDataUrl: image, defect, k, pipeline, ...(usesMetadata && metadata.trim() && { metadata }) }),
+        body: JSON.stringify({ imageDataUrl: image, defect, k, pipeline: "graph" }),
       });
       const text = await res.text();
       let data: AnalysisResponse | AnalysisError;
@@ -69,9 +65,8 @@ export function InspectionPage({ pipeline }: { pipeline: PipelineId }) {
   };
 
   return (
-    <main className="shell" data-pipeline={pipeline}>
-      <Header active={pipeline} />
-      <p className="muted pipeline-note"><strong>{meta.label}:</strong> {meta.blurb}</p>
+    <main className="shell">
+      <Header model="model-1" view="analyse" />
 
       <form className="card" onSubmit={submit}>
         <label className={`drop ${image ? "filled" : ""}`}>
@@ -95,9 +90,8 @@ export function InspectionPage({ pipeline }: { pipeline: PipelineId }) {
           </label>
         </div>
         <label>
-          <span className="label">{usesMetadata ? "Metadata / observations" : "Metadata"} {!usesMetadata && <small>(not used by this pipeline)</small>}</span>
-          <textarea rows={2} disabled={!usesMetadata} maxLength={1000} value={usesMetadata ? metadata : ""} onChange={(e) => setMetadata(e.target.value)}
-            placeholder={usesMetadata ? "Component and symptoms, e.g. “RCC beam, vertical cracks near mid-span”. Used to rank causes." : "Building age, location, observations… not used yet."} />
+          <span className="label">Metadata <small>(coming soon)</small></span>
+          <textarea rows={2} disabled placeholder="Building age, location, observations… not used yet." />
         </label>
         <button type="submit" disabled={!image || !defect || loading}>
           {loading && <i className="spinner" />}{loading ? "Analysing…" : "Analyse"}

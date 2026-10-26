@@ -111,7 +111,7 @@ export default function GraphEditor() {
 
   return (
     <main className="shell wide">
-      <Header active="graph" />
+      <Header model="model-1" view="graph" />
 
       <div className="card toolbar">
         <select value={label} onChange={(e) => pickLabel(e.target.value as Label)}>

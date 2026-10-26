@@ -36,13 +36,14 @@ This page and `/api/graph` are public: there is no login, so anyone with the URL
 
 - `lib/defects.ts` – the defect dropdown list. Each `id` must equal the `Defect.defect_id` in the graph.
 - `lib/retrieval/` – candidate retrieval, scoring and ranking (see "Pipelines and top-k ranking").
-- `lib/pipelines.ts` – the four pipelines (navbar + routes). `components/InspectionPage.tsx` is the shared UI; `/`, `/contextual`, `/semantic`, `/hybrid` each render it with a different pipeline.
+- `lib/models.ts` – the four models in the top navbar. Only Model 1 (Graph-Based: `/` and `/graph`) is implemented; Models 2–4 are static placeholders (`/model-N`, `/model-N/graph`, `components/StaticModelPage.tsx`). Rename a placeholder by editing its `label`.
+- `lib/pipelines.ts` – retrieval strategies accepted by `/api/analyze`; the UI only uses `graph` for now.
 - `lib/nvidia.ts` – the NVIDIA chat call.
 - `lib/graph.ts`, `lib/graph-schema.ts`, `app/api/graph/route.ts`, `app/graph/page.tsx` – the graph editor.
 - `lib/storage.ts` – Supabase image storage.
 - `app/api/analyze/route.ts` – the pipeline (validate → store image → KG → predict).
 
-## Pipelines and top-k ranking
+## Retrieval strategies and top-k ranking
 
 `POST /api/analyze` accepts optional `pipeline` (`graph` default, `contextual`, `semantic`, `hybrid`) and `metadata` (inspector notes, ≤1000 chars; ignored by `graph`).
 
